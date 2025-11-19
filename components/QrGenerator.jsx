@@ -167,48 +167,48 @@ function generateQRCodeMatrix(text) {
 const qrCategories = {
   web: {
     name: "Web y URLs",
-    icon: "fa-globe",
+    icon: "fas fa-globe",
     types: [
-      { id: "url", name: "Sitio web", icon: "fa-globe", placeholder: "https://ejemplo.com" },
-      { id: "pdf", name: "PDF", icon: "fa-file-pdf", placeholder: "https://ejemplo.com/documento.pdf" },
-      { id: "links", name: "Lista de enlaces", icon: "fa-link", placeholder: "URL1,URL2,URL3" },
-      { id: "app", name: "Aplicaciones", icon: "fa-mobile-alt", placeholder: "URL de la app store" },
+      { id: "url", name: "Sitio web", icon: "fas fa-globe", placeholder: "https://ejemplo.com" },
+      { id: "pdf", name: "PDF", icon: "fas fa-file-pdf", placeholder: "https://ejemplo.com/documento.pdf" },
+      { id: "links", name: "Lista de enlaces", icon: "fas fa-link", placeholder: "URL1,URL2,URL3" },
+      { id: "app", name: "Aplicaciones", icon: "fas fa-mobile-screen-button", placeholder: "URL de la app store" },
     ]
   },
   social: {
     name: "Redes Sociales",
-    icon: "fa-share-alt",
+    icon: "fas fa-share-nodes",
     types: [
-      { id: "facebook", name: "Facebook", icon: "fa-facebook", placeholder: "https://facebook.com/tu-pagina" },
-      { id: "instagram", name: "Instagram", icon: "fa-instagram", placeholder: "https://instagram.com/tu-perfil" },
-      { id: "whatsapp", name: "WhatsApp", icon: "fa-whatsapp", placeholder: "+1234567890" },
-      { id: "social", name: "Redes sociales", icon: "fa-share-alt", placeholder: "URLs de redes sociales" },
+      { id: "facebook", name: "Facebook", icon: "fab fa-facebook", placeholder: "https://facebook.com/tu-pagina" },
+      { id: "instagram", name: "Instagram", icon: "fab fa-instagram", placeholder: "https://instagram.com/tu-perfil" },
+      { id: "whatsapp", name: "WhatsApp", icon: "fab fa-whatsapp", placeholder: "+1234567890" },
+      { id: "social", name: "Redes sociales", icon: "fas fa-share-nodes", placeholder: "URLs de redes sociales" },
     ]
   },
   media: {
     name: "Multimedia",
-    icon: "fa-photo-video",
+    icon: "fas fa-photo-film",
     types: [
-      { id: "images", name: "Imágenes", icon: "fa-images", placeholder: "https://ejemplo.com/imagen.jpg" },
-      { id: "video", name: "Video", icon: "fa-video", placeholder: "https://ejemplo.com/video.mp4" },
-      { id: "mp3", name: "MP3", icon: "fa-music", placeholder: "https://ejemplo.com/audio.mp3" },
+      { id: "images", name: "Imágenes", icon: "fas fa-images", placeholder: "https://ejemplo.com/imagen.jpg" },
+      { id: "video", name: "Video", icon: "fas fa-video", placeholder: "https://ejemplo.com/video.mp4" },
+      { id: "mp3", name: "MP3", icon: "fas fa-music", placeholder: "https://ejemplo.com/audio.mp3" },
     ]
   },
   contact: {
     name: "Contacto",
-    icon: "fa-address-book",
+    icon: "fas fa-address-book",
     types: [
-      { id: "vcard", name: "vCard", icon: "fa-address-card", placeholder: "Datos de contacto" },
-      { id: "business", name: "Empresa", icon: "fa-building", placeholder: "Información de la empresa" },
+      { id: "vcard", name: "vCard", icon: "fas fa-address-card", placeholder: "Datos de contacto" },
+      { id: "business", name: "Empresa", icon: "fas fa-building", placeholder: "Información de la empresa" },
     ]
   },
   other: {
     name: "Otros",
-    icon: "fa-ellipsis-h",
+    icon: "fas fa-ellipsis",
     types: [
-      { id: "wifi", name: "Wi-Fi", icon: "fa-wifi", placeholder: "SSID:MiRed,Password:12345678" },
-      { id: "menu", name: "Menú", icon: "fa-utensils", placeholder: "Nombre del restaurante" },
-      { id: "coupon", name: "Cupón", icon: "fa-ticket-alt", placeholder: "Código del cupón" },
+      { id: "wifi", name: "Wi-Fi", icon: "fas fa-wifi", placeholder: "SSID:MiRed,Password:12345678" },
+      { id: "menu", name: "Menú", icon: "fas fa-utensils", placeholder: "Nombre del restaurante" },
+      { id: "coupon", name: "Cupón", icon: "fas fa-ticket", placeholder: "Código del cupón" },
     ]
   }
 };
@@ -1095,7 +1095,7 @@ export default function QrGenerator() {
                   className="w-full flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 bg-white border-2 border-gray-300 rounded-lg hover:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <i className={`fas ${selectedType.icon} text-green-600 text-lg sm:text-xl`}></i>
+                    <i className={`${selectedType.icon.startsWith('fa') ? selectedType.icon : `fas ${selectedType.icon}`} text-green-600 text-lg sm:text-xl`}></i>
                     <span className="text-base sm:text-lg font-medium text-gray-800">{selectedType.name}</span>
                   </div>
                   <i className={`fas fa-chevron-${isDropdownOpen ? 'up' : 'down'} text-gray-400 transition-transform`}></i>
@@ -1126,7 +1126,7 @@ export default function QrGenerator() {
                           {/* Header de categoría */}
                           <div className="px-4 py-2 bg-green-50 border-b border-green-100">
                             <div className="flex items-center gap-2">
-                              <i className={`fas ${category.icon} text-green-600 text-sm`}></i>
+                              <i className={`${category.icon.startsWith('fa') ? category.icon : `fas ${category.icon}`} text-green-600 text-sm`}></i>
                               <span className="text-sm font-semibold text-green-700">{category.name}</span>
                             </div>
                           </div>
@@ -1145,7 +1145,7 @@ export default function QrGenerator() {
                                 qrType === type.id ? "bg-green-100 border-l-4 border-green-500" : ""
                               }`}
                             >
-                              <i className={`fas ${type.icon} text-lg ${
+                              <i className={`${type.icon.startsWith('fa') ? type.icon : `fas ${type.icon}`} text-lg ${
                                 qrType === type.id ? "text-green-600" : "text-gray-500"
                               }`}></i>
                               <span className={`text-sm sm:text-base ${
@@ -1175,7 +1175,7 @@ export default function QrGenerator() {
               {/* Input principal según el tipo */}
               <div>
                 <label className="block text-base font-medium text-gray-700 mb-3">
-                  <i className={`fas ${selectedType.icon} text-green-600 hover:text-green-700 transition-colors mr-2`}></i>
+                  <i className={`${selectedType.icon.startsWith('fa') ? selectedType.icon : `fas ${selectedType.icon}`} text-green-600 hover:text-green-700 transition-colors mr-2`}></i>
                   {selectedType.name}
                 </label>
                 <input
@@ -1460,7 +1460,7 @@ export default function QrGenerator() {
                             const typeInfo = allQrTypes.find(t => t.id === type);
                             return (
                               <div key={type} className="flex items-center gap-1 bg-white px-2 py-1 rounded text-xs shadow-sm">
-                                <i className={`fas ${typeInfo?.icon || 'fa-qrcode'} text-green-600`}></i>
+                                <i className={`${typeInfo?.icon?.startsWith('fa') ? typeInfo.icon : `fas ${typeInfo?.icon || 'fa-qrcode'}`} text-green-600`}></i>
                                 <span className="text-gray-700 font-medium">{count}</span>
                               </div>
                             );
@@ -1685,7 +1685,7 @@ export default function QrGenerator() {
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-48 sm:h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                  <i className={`fas ${selectedType.icon} text-4xl sm:text-6xl text-green-300 hover:text-green-400 transition-colors mb-3 sm:mb-4`}></i>
+                  <i className={`${selectedType.icon.startsWith('fa') ? selectedType.icon : `fas ${selectedType.icon}`} text-4xl sm:text-6xl text-green-300 hover:text-green-400 transition-colors mb-3 sm:mb-4`}></i>
                   <p className="text-gray-500 text-center px-4 text-xs sm:text-sm">
                     Completa los campos y haz clic en "Generar QR" para ver la vista previa
                   </p>
