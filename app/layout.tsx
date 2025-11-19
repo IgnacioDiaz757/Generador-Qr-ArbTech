@@ -18,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ArbTech - Generador de QR",
   description: "Genera códigos QR personalizados con colores y logos",
+  icons: {
+    icon: "/arbtech-logo.png",
+    shortcut: "/arbtech-logo.png",
+    apple: "/arbtech-logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -33,6 +38,7 @@ export default function RootLayout({
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
           crossOrigin="anonymous"
         />
+        <link rel="icon" href="/arbtech-logo.png" type="image/png" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
