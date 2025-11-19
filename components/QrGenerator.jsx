@@ -413,9 +413,19 @@ export default function QrGenerator() {
   const [validation, setValidation] = useState({ errors: [], suggestions: [], isValid: true });
   const [analytics, setAnalytics] = useState(getAnalytics());
   
+  // Estados para compartir y colaborar
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [showEmbedCode, setShowEmbedCode] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  
+  // Estado para formato de descarga
+  const [downloadFormat, setDownloadFormat] = useState("png");
+  
   const canvasRef = useRef(null);
   const logoInputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const embedCodeRef = useRef(null);
 
   const selectedType = allQrTypes.find(t => t.id === qrType) || allQrTypes[0];
 
@@ -683,8 +693,107 @@ export default function QrGenerator() {
     }
   };
 
-  const downloadQr = () => {
-    if (qrImage) {
+  // Convertir imagen a diferentes formatos
+  const convertToFormat = async (format, quality = 0.92) => {
+    if (!qrImage) return null;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    
+    return new Promise((resolve) => {
+      img.onload = () => {
+        // Asegurar que el canvas tenga el tamaño correcto
+        const size = qrSize;
+        canvas.width = size;
+        canvas.height = size;
+        
+        // Dibujar imagen en el canvas
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        
+        let dataUrl;
+        switch (format.toLowerCase()) {
+          case "jpg":
+          case "jpeg":
+            dataUrl = canvas.toDataURL("image/jpeg", quality);
+            break;
+          case "webp":
+            dataUrl = canvas.toDataURL("image/webp", quality);
+            break;
+          case "png":
+          default:
+            dataUrl = canvas.toDataURL("image/png");
+            break;
+        }
+        
+        resolve(dataUrl);
+      };
+      img.src = qrImage;
+    });
+  };
+
+  // Generar SVG del QR
+  const generateSVG = () => {
+    if (!qrImage) return null;
+    
+    const size = qrSize;
+    const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <rect width="${size}" height="${size}" fill="#FFFFFF"/>
+  <image href="${qrImage}" width="${size}" height="${size}"/>
+</svg>`.trim();
+    
+    return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+  };
+
+  const downloadQr = async () => {
+    if (!qrImage) return;
+
+    let dataUrl = qrImage;
+    let filename = `qr-code-${Date.now()}`;
+    let mimeType = "image/png";
+
+    try {
+      switch (downloadFormat.toLowerCase()) {
+        case "jpg":
+        case "jpeg":
+          dataUrl = await convertToFormat("jpg", 0.92);
+          filename += ".jpg";
+          mimeType = "image/jpeg";
+          break;
+        case "webp":
+          dataUrl = await convertToFormat("webp", 0.92);
+          filename += ".webp";
+          mimeType = "image/webp";
+          break;
+        case "svg":
+          dataUrl = generateSVG();
+          filename += ".svg";
+          mimeType = "image/svg+xml";
+          break;
+        case "png":
+        default:
+          dataUrl = qrImage;
+          filename += ".png";
+          mimeType = "image/png";
+          break;
+      }
+
+      if (dataUrl) {
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (error) {
+      console.error("Error al descargar QR:", error);
+      // Fallback a PNG
       const link = document.createElement("a");
       link.href = qrImage;
       link.download = `qr-code-${Date.now()}.png`;
@@ -692,6 +801,99 @@ export default function QrGenerator() {
       link.click();
       document.body.removeChild(link);
     }
+  };
+
+  // Funciones de compartir y colaborar
+  const generateShareUrl = () => {
+    if (typeof window !== "undefined" && qrImage) {
+      // Crear un enlace compartible usando data URL (para desarrollo)
+      // En producción, podrías subir la imagen a un servidor y generar una URL real
+      const base64 = qrImage.split(',')[1];
+      const blob = new Blob([atob(base64)], { type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+      setShareUrl(url);
+      return url;
+    }
+    return "";
+  };
+
+  const copyToClipboard = async (text, type = "text") => {
+    try {
+      if (type === "image" && qrImage) {
+        // Convertir base64 a blob y copiar
+        const response = await fetch(qrImage);
+        const blob = await response.blob();
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type]: blob })
+        ]);
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Error al copiar:", err);
+      // Fallback para navegadores antiguos
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const shareOnSocial = (platform) => {
+    const formattedData = formatQRData(qrType, text, extraFields);
+    const shareText = encodeURIComponent(`¡Mira este código QR generado con ArbTech!`);
+    const shareUrl = typeof window !== "undefined" ? window.location.href : "";
+    
+    let url = "";
+    
+    switch (platform) {
+      case "facebook":
+        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+        break;
+      case "twitter":
+        url = `https://twitter.com/intent/tweet?text=${shareText}&url=${encodeURIComponent(shareUrl)}`;
+        break;
+      case "linkedin":
+        url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`;
+        break;
+      case "whatsapp":
+        url = `https://wa.me/?text=${shareText}%20${encodeURIComponent(shareUrl)}`;
+        break;
+      case "telegram":
+        url = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${shareText}`;
+        break;
+      case "email":
+        const subject = encodeURIComponent("Código QR generado con ArbTech");
+        const body = encodeURIComponent(`¡Mira este código QR!\n\n${formattedData}\n\nGenerado con: ${shareUrl}`);
+        url = `mailto:?subject=${subject}&body=${body}`;
+        break;
+    }
+    
+    if (url) {
+      window.open(url, "_blank", "width=600,height=400");
+    }
+  };
+
+  const getEmbedCode = () => {
+    if (!qrImage) return "";
+    const formattedData = formatQRData(qrType, text, extraFields);
+    return `<div style="text-align: center;">
+  <img src="${qrImage}" alt="QR Code - ${formattedData.substring(0, 50)}..." style="max-width: 300px; height: auto;" />
+  <p style="font-size: 12px; color: #666; margin-top: 10px;">Generado con <a href="${typeof window !== "undefined" ? window.location.origin : ""}" target="_blank">ArbTech QR Generator</a></p>
+</div>`;
+  };
+
+  const copyEmbedCode = () => {
+    const code = getEmbedCode();
+    copyToClipboard(code, "text");
   };
 
   // Regenerar QR cuando cambia el color, logo, tamaño, margen o corrección de errores
@@ -1279,13 +1481,207 @@ export default function QrGenerator() {
                     />
                   </div>
 
-                  <button
-                    onClick={downloadQr}
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 sm:py-4 px-5 sm:px-7 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2 text-base sm:text-lg"
-                  >
-                    <i className="fas fa-download text-white text-lg"></i>
-                    <span>Descargar QR</span>
-                  </button>
+                  {/* Selector de formato y botón Descargar */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <i className="fas fa-file-export text-green-600 mr-2"></i>
+                        Formato de descarga
+                      </label>
+                      <div className="grid grid-cols-4 gap-2">
+                        <button
+                          onClick={() => setDownloadFormat("png")}
+                          className={`px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                            downloadFormat === "png"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : "border-gray-300 bg-white text-gray-700 hover:border-green-300"
+                          }`}
+                        >
+                          <i className="fas fa-image mr-1"></i>
+                          PNG
+                        </button>
+                        <button
+                          onClick={() => setDownloadFormat("jpg")}
+                          className={`px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                            downloadFormat === "jpg"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : "border-gray-300 bg-white text-gray-700 hover:border-green-300"
+                          }`}
+                        >
+                          <i className="fas fa-file-image mr-1"></i>
+                          JPG
+                        </button>
+                        <button
+                          onClick={() => setDownloadFormat("svg")}
+                          className={`px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                            downloadFormat === "svg"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : "border-gray-300 bg-white text-gray-700 hover:border-green-300"
+                          }`}
+                        >
+                          <i className="fas fa-vector-square mr-1"></i>
+                          SVG
+                        </button>
+                        <button
+                          onClick={() => setDownloadFormat("webp")}
+                          className={`px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                            downloadFormat === "webp"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : "border-gray-300 bg-white text-gray-700 hover:border-green-300"
+                          }`}
+                        >
+                          <i className="fas fa-file-code mr-1"></i>
+                          WEBP
+                        </button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        <i className="fas fa-info-circle mr-1"></i>
+                        {downloadFormat === "png" && "Mejor calidad, sin pérdida de datos"}
+                        {downloadFormat === "jpg" && "Tamaño más pequeño, ideal para web"}
+                        {downloadFormat === "svg" && "Vectorial, escalable sin pérdida de calidad"}
+                        {downloadFormat === "webp" && "Formato moderno, mejor compresión"}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={downloadQr}
+                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 sm:py-4 px-5 sm:px-7 rounded-lg transition-all duration-200 transform hover:scale-105 flex items-center justify-center gap-2 text-base sm:text-lg"
+                    >
+                      <i className="fas fa-download text-white text-lg"></i>
+                      <span>Descargar QR ({downloadFormat.toUpperCase()})</span>
+                    </button>
+                  </div>
+
+                  {/* Sección Compartir y Colaborar */}
+                  <div className="border-t border-gray-200 pt-4 space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                      <i className="fas fa-share-alt text-green-600 mr-2"></i>
+                      Compartir y Colaborar
+                    </h3>
+
+                    {/* Botones de Redes Sociales */}
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      <button
+                        onClick={() => shareOnSocial("facebook")}
+                        className="flex flex-col items-center justify-center p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all transform hover:scale-105"
+                        title="Compartir en Facebook"
+                      >
+                        <i className="fab fa-facebook-f text-xl mb-1"></i>
+                        <span className="text-xs hidden sm:inline">Facebook</span>
+                      </button>
+                      <button
+                        onClick={() => shareOnSocial("twitter")}
+                        className="flex flex-col items-center justify-center p-3 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-all transform hover:scale-105"
+                        title="Compartir en Twitter"
+                      >
+                        <i className="fab fa-twitter text-xl mb-1"></i>
+                        <span className="text-xs hidden sm:inline">Twitter</span>
+                      </button>
+                      <button
+                        onClick={() => shareOnSocial("linkedin")}
+                        className="flex flex-col items-center justify-center p-3 bg-blue-700 hover:bg-blue-800 text-white rounded-lg transition-all transform hover:scale-105"
+                        title="Compartir en LinkedIn"
+                      >
+                        <i className="fab fa-linkedin-in text-xl mb-1"></i>
+                        <span className="text-xs hidden sm:inline">LinkedIn</span>
+                      </button>
+                      <button
+                        onClick={() => shareOnSocial("whatsapp")}
+                        className="flex flex-col items-center justify-center p-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all transform hover:scale-105"
+                        title="Compartir en WhatsApp"
+                      >
+                        <i className="fab fa-whatsapp text-xl mb-1"></i>
+                        <span className="text-xs hidden sm:inline">WhatsApp</span>
+                      </button>
+                      <button
+                        onClick={() => shareOnSocial("telegram")}
+                        className="flex flex-col items-center justify-center p-3 bg-blue-400 hover:bg-blue-500 text-white rounded-lg transition-all transform hover:scale-105"
+                        title="Compartir en Telegram"
+                      >
+                        <i className="fab fa-telegram-plane text-xl mb-1"></i>
+                        <span className="text-xs hidden sm:inline">Telegram</span>
+                      </button>
+                      <button
+                        onClick={() => shareOnSocial("email")}
+                        className="flex flex-col items-center justify-center p-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all transform hover:scale-105"
+                        title="Compartir por Email"
+                      >
+                        <i className="fas fa-envelope text-xl mb-1"></i>
+                        <span className="text-xs hidden sm:inline">Email</span>
+                      </button>
+                    </div>
+
+                    {/* Copiar imagen al portapapeles */}
+                    <button
+                      onClick={() => copyToClipboard(qrImage, "image")}
+                      className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2.5 px-4 rounded-lg transition-all flex items-center justify-center gap-2"
+                    >
+                      <i className={`fas ${copied ? "fa-check" : "fa-copy"} text-green-600`}></i>
+                      <span>{copied ? "¡Copiado!" : "Copiar imagen al portapapeles"}</span>
+                    </button>
+
+                    {/* Copiar URL compartible */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={typeof window !== "undefined" ? window.location.href : ""}
+                        readOnly
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+                        placeholder="URL compartible"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(typeof window !== "undefined" ? window.location.href : "", "text")}
+                        className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all flex items-center gap-2"
+                        title="Copiar URL"
+                      >
+                        <i className={`fas ${copied ? "fa-check" : "fa-link"}`}></i>
+                        <span className="hidden sm:inline">{copied ? "Copiado" : "Copiar"}</span>
+                      </button>
+                    </div>
+
+                    {/* Código Embed */}
+                    <div>
+                      <button
+                        onClick={() => setShowEmbedCode(!showEmbedCode)}
+                        className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <i className="fas fa-code text-green-600"></i>
+                          <span className="font-medium">Código Embed</span>
+                        </div>
+                        <i className={`fas fa-chevron-${showEmbedCode ? 'up' : 'down'} text-gray-400`}></i>
+                      </button>
+                      
+                      {showEmbedCode && (
+                        <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium text-gray-700">
+                              Copia este código para insertar el QR en tu sitio web:
+                            </label>
+                            <button
+                              onClick={copyEmbedCode}
+                              className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-sm rounded transition-all flex items-center gap-1"
+                            >
+                              <i className={`fas ${copied ? "fa-check" : "fa-copy"}`}></i>
+                              <span>{copied ? "Copiado" : "Copiar"}</span>
+                            </button>
+                          </div>
+                          <textarea
+                            ref={embedCodeRef}
+                            value={getEmbedCode()}
+                            readOnly
+                            rows={6}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
+                            onClick={(e) => e.target.select()}
+                          />
+                          <p className="text-xs text-gray-500 mt-2">
+                            <i className="fas fa-info-circle mr-1"></i>
+                            Pega este código HTML en tu sitio web para mostrar el QR
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-48 sm:h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
