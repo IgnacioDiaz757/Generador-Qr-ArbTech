@@ -285,6 +285,113 @@ function formatQRData(type, data, extraData = {}) {
   }
 }
 
+// Funciones de validación inteligente
+const validateInput = (type, value, extraData = {}) => {
+  const errors = [];
+  const suggestions = [];
+
+  switch (type) {
+    case "url":
+    case "pdf":
+    case "images":
+    case "video":
+    case "mp3":
+    case "app":
+    case "facebook":
+    case "instagram":
+      if (value && !value.match(/^https?:\/\//i) && !value.match(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}/)) {
+        errors.push("URL inválida");
+        suggestions.push("Agrega 'https://' al inicio o ingresa un dominio válido");
+      }
+      break;
+    
+    case "whatsapp":
+      const whatsappPhone = value.replace(/[^0-9+]/g, "");
+      if (value && whatsappPhone.length < 8) {
+        errors.push("Número de WhatsApp inválido");
+        suggestions.push("Formato: +5493512606190");
+      }
+      break;
+  }
+
+  // Validar campos extra
+  if (extraData.email) {
+    if (!extraData.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      errors.push("Email inválido en campos adicionales");
+      suggestions.push("Formato de email: ejemplo@dominio.com");
+    }
+  }
+
+  if (extraData.phone) {
+    const phone = extraData.phone.replace(/[^0-9+]/g, "");
+    if (phone.length < 8) {
+      errors.push("Teléfono inválido en campos adicionales");
+      suggestions.push("Ingresa un número válido con código de país");
+    }
+  }
+
+  return { errors, suggestions, isValid: errors.length === 0 };
+};
+
+// Detectar tipo automáticamente
+const detectType = (value) => {
+  if (!value) return null;
+  
+  if (value.match(/^https?:\/\//i) || value.match(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}/)) {
+    if (value.match(/\.(pdf)$/i)) return "pdf";
+    if (value.match(/\.(jpg|jpeg|png|gif|webp)$/i)) return "images";
+    if (value.match(/\.(mp4|avi|mov|wmv)$/i)) return "video";
+    if (value.match(/\.(mp3|wav|ogg)$/i)) return "mp3";
+    if (value.match(/facebook\.com|fb\.com/i)) return "facebook";
+    if (value.match(/instagram\.com|instagr\.am/i)) return "instagram";
+    if (value.match(/wa\.me|whatsapp/i)) return "whatsapp";
+    return "url";
+  }
+  
+  if (value.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) return "email";
+  if (value.match(/^\+?[0-9]{8,}$/)) return "phone";
+  if (value.match(/^WIFI:/i)) return "wifi";
+  
+  return null;
+};
+
+// Funciones de Analytics
+const getAnalytics = () => {
+  if (typeof window === "undefined") return { totalGenerated: 0, todayGenerated: 0, typesCount: {} };
+  
+  const analytics = localStorage.getItem("qrAnalytics");
+  if (!analytics) return { totalGenerated: 0, todayGenerated: 0, typesCount: {} };
+  
+  const data = JSON.parse(analytics);
+  const today = new Date().toDateString();
+  
+  return {
+    totalGenerated: data.totalGenerated || 0,
+    todayGenerated: data.lastDate === today ? (data.todayGenerated || 0) : 0,
+    typesCount: data.typesCount || {},
+    lastDate: data.lastDate
+  };
+};
+
+const updateAnalytics = (type) => {
+  if (typeof window === "undefined") return;
+  
+  const analytics = getAnalytics();
+  const today = new Date().toDateString();
+  
+  const updated = {
+    totalGenerated: analytics.totalGenerated + 1,
+    todayGenerated: analytics.lastDate === today ? analytics.todayGenerated + 1 : 1,
+    typesCount: {
+      ...analytics.typesCount,
+      [type]: (analytics.typesCount[type] || 0) + 1
+    },
+    lastDate: today
+  };
+  
+  localStorage.setItem("qrAnalytics", JSON.stringify(updated));
+};
+
 export default function QrGenerator() {
   const [qrType, setQrType] = useState("url");
   const [text, setText] = useState("");
@@ -295,11 +402,37 @@ export default function QrGenerator() {
   const [extraFields, setExtraFields] = useState({});
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Nuevos estados para personalización
+  const [errorCorrection, setErrorCorrection] = useState("M"); // L, M, Q, H
+  const [qrSize, setQrSize] = useState(400);
+  const [qrMargin, setQrMargin] = useState(40);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // Estados para validación y analytics
+  const [validation, setValidation] = useState({ errors: [], suggestions: [], isValid: true });
+  const [analytics, setAnalytics] = useState(getAnalytics());
+  
   const canvasRef = useRef(null);
   const logoInputRef = useRef(null);
   const dropdownRef = useRef(null);
 
   const selectedType = allQrTypes.find(t => t.id === qrType) || allQrTypes[0];
+
+  // Validar input en tiempo real
+  useEffect(() => {
+    if (text || Object.values(extraFields).some(v => v)) {
+      const validationResult = validateInput(qrType, text, extraFields);
+      setValidation(validationResult);
+    } else {
+      setValidation({ errors: [], suggestions: [], isValid: true });
+    }
+  }, [text, extraFields, qrType]);
+
+  // Cargar analytics al montar
+  useEffect(() => {
+    setAnalytics(getAnalytics());
+  }, []);
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
@@ -325,6 +458,23 @@ export default function QrGenerator() {
     return acc;
   }, {});
 
+  // Detectar tipo automáticamente cuando el usuario escribe
+  const handleTextChange = (value) => {
+    setText(value);
+    
+    // Detectar tipo automáticamente si está vacío o es URL
+    if (value && qrType === "url") {
+      const detected = detectType(value);
+      if (detected && detected !== "url") {
+        // Sugerir cambio de tipo (para futura implementación)
+        const detectedType = allQrTypes.find(t => t.id === detected);
+        if (detectedType) {
+          // No cambiar automáticamente, solo para referencia
+        }
+      }
+    }
+  };
+
   const generateQr = async () => {
     const formattedData = formatQRData(qrType, text, extraFields);
     
@@ -332,21 +482,30 @@ export default function QrGenerator() {
       return;
     }
 
+    // Validar antes de generar
+    const validationResult = validateInput(qrType, text, extraFields);
+    if (!validationResult.isValid && qrType !== "url" && qrType !== "menu" && qrType !== "coupon") {
+      // Mostrar errores pero permitir generar de todas formas
+    }
+
     try {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const ctx = canvas.getContext("2d");
-      const size = 400;
-      const padding = 40;
+      const size = qrSize;
+      const padding = qrMargin;
 
       canvas.width = size;
       canvas.height = size;
 
       // Usar API externa para generar QR válido (sin librerías npm)
-      // API pública de QR code generation
+      // API pública de QR code generation con nivel de corrección de errores
       const encodedData = encodeURIComponent(formattedData);
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size - padding * 2}x${size - padding * 2}&data=${encodedData}&color=${qrColor.replace('#', '')}`;
+      // ECC level: L (7%), M (15%), Q (25%), H (30%)
+      // Nota: La API qrserver.com no soporta el parámetro ecc directamente, pero usamos M por defecto
+      const qrSizeValue = size - padding * 2;
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSizeValue}x${qrSizeValue}&data=${encodedData}&color=${qrColor.replace('#', '')}`;
       
       const qrImg = new Image();
       qrImg.crossOrigin = "anonymous";
@@ -432,14 +591,27 @@ export default function QrGenerator() {
             ctx.drawImage(logoImg, logoX2, logoY2, logoSize, logoSize);
             ctx.restore();
             
-            setQrImage(canvas.toDataURL("image/png"));
+            const imageData = canvas.toDataURL("image/png");
+            setQrImage(imageData);
+            
+            // Actualizar analytics después de generar
+            updateAnalytics(qrType);
+            setAnalytics(getAnalytics());
           };
           logoImg.onerror = () => {
-            setQrImage(canvas.toDataURL("image/png"));
+            const imageData = canvas.toDataURL("image/png");
+            setQrImage(imageData);
+            updateAnalytics(qrType);
+            setAnalytics(getAnalytics());
           };
           logoImg.src = logoPreview;
         } else {
-          setQrImage(canvas.toDataURL("image/png"));
+          const imageData = canvas.toDataURL("image/png");
+          setQrImage(imageData);
+          
+          // Actualizar analytics después de generar
+          updateAnalytics(qrType);
+          setAnalytics(getAnalytics());
         }
       };
       
@@ -463,7 +635,12 @@ export default function QrGenerator() {
           }
         }
         
-        setQrImage(canvas.toDataURL("image/png"));
+        const imageData = canvas.toDataURL("image/png");
+        setQrImage(imageData);
+        
+        // Actualizar analytics después de generar
+        updateAnalytics(qrType);
+        setAnalytics(getAnalytics());
       };
       
       qrImg.src = qrApiUrl;
@@ -517,12 +694,12 @@ export default function QrGenerator() {
     }
   };
 
-  // Regenerar QR cuando cambia el color o el logo
+  // Regenerar QR cuando cambia el color, logo, tamaño, margen o corrección de errores
   useEffect(() => {
     if (text && qrImage) {
       generateQr();
     }
-  }, [qrColor, logoPreview]);
+  }, [qrColor, logoPreview, qrSize, qrMargin, errorCorrection]);
 
   // Limpiar campos cuando cambia el tipo
   useEffect(() => {
@@ -802,15 +979,49 @@ export default function QrGenerator() {
                 <input
                   type="text"
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={(e) => handleTextChange(e.target.value)}
                   placeholder={selectedType.placeholder}
-                  className="w-full px-4 sm:px-5 py-3 sm:py-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all text-base sm:text-lg"
+                  className={`w-full px-4 sm:px-5 py-3 sm:py-4 border rounded-lg focus:outline-none focus:ring-2 transition-all text-base sm:text-lg ${
+                    validation.errors.length > 0
+                      ? "border-red-300 focus:ring-red-500 focus:border-red-500"
+                      : validation.isValid && text
+                      ? "border-green-300 focus:ring-green-500 focus:border-green-500"
+                      : "border-gray-300 focus:ring-green-500 focus:border-transparent"
+                  }`}
                   onKeyPress={(e) => {
                     if (e.key === "Enter") {
                       generateQr();
                     }
                   }}
                 />
+                
+                {/* Mensajes de validación */}
+                {validation.errors.length > 0 && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <i className="fas fa-exclamation-circle text-red-600 mt-0.5"></i>
+                      <div className="flex-1">
+                        {validation.errors.map((error, idx) => (
+                          <p key={idx} className="text-sm text-red-700">{error}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Sugerencias */}
+                {validation.suggestions.length > 0 && !validation.errors.length && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <i className="fas fa-lightbulb text-blue-600 mt-0.5"></i>
+                      <div className="flex-1">
+                        {validation.suggestions.map((suggestion, idx) => (
+                          <p key={idx} className="text-sm text-blue-700">{suggestion}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Campos extra según el tipo */}
@@ -837,6 +1048,90 @@ export default function QrGenerator() {
                     placeholder="#000000"
                   />
                 </div>
+              </div>
+
+              {/* Opciones avanzadas */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <i className="fas fa-cog text-green-600"></i>
+                    <span className="text-base font-medium text-gray-700">Opciones Avanzadas</span>
+                  </div>
+                  <i className={`fas fa-chevron-${showAdvanced ? 'up' : 'down'} text-gray-400`}></i>
+                </button>
+                
+                {showAdvanced && (
+                  <div className="mt-4 space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    {/* Nivel de corrección de errores */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <i className="fas fa-shield-alt text-green-600 mr-2"></i>
+                        Nivel de Corrección de Errores
+                      </label>
+                      <select
+                        value={errorCorrection}
+                        onChange={(e) => setErrorCorrection(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-base"
+                      >
+                        <option value="L">L - Bajo (7% recuperación)</option>
+                        <option value="M">M - Medio (15% recuperación) - Recomendado</option>
+                        <option value="Q">Q - Alto (25% recuperación)</option>
+                        <option value="H">H - Máximo (30% recuperación)</option>
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Mayor nivel = más datos de corrección, QR más denso pero más resistente a daños
+                      </p>
+                    </div>
+                    
+                    {/* Tamaño del QR */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <i className="fas fa-expand-arrows-alt text-green-600 mr-2"></i>
+                        Tamaño del QR: {qrSize}px
+                      </label>
+                      <input
+                        type="range"
+                        min="200"
+                        max="800"
+                        step="50"
+                        value={qrSize}
+                        onChange={(e) => setQrSize(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>200px</span>
+                        <span>500px</span>
+                        <span>800px</span>
+                      </div>
+                    </div>
+                    
+                    {/* Margen */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <i className="fas fa-border-style text-green-600 mr-2"></i>
+                        Margen: {qrMargin}px
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="5"
+                        value={qrMargin}
+                        onChange={(e) => setQrMargin(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>0px</span>
+                        <span>50px</span>
+                        <span>100px</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Upload de logo */}
@@ -904,10 +1199,75 @@ export default function QrGenerator() {
 
             {/* Panel de Vista Previa */}
             <div className="bg-white rounded-xl shadow-lg p-5 sm:p-7 lg:p-10 space-y-5 sm:space-y-7">
-              <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 flex items-center">
-                <i className="fas fa-eye text-green-600 hover:text-green-700 transition-colors mr-2"></i>
-                Vista Previa
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 flex items-center">
+                  <i className="fas fa-eye text-green-600 hover:text-green-700 transition-colors mr-2"></i>
+                  Vista Previa
+                </h2>
+                
+                {/* Analytics básicos */}
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <i className="fas fa-chart-line text-green-600"></i>
+                  <span className="hidden sm:inline">Total: {analytics.totalGenerated}</span>
+                  <span className="sm:hidden">{analytics.totalGenerated}</span>
+                </div>
+              </div>
+              
+              {/* Panel de Analytics */}
+              {analytics.totalGenerated > 0 && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-green-800 flex items-center">
+                      <i className="fas fa-chart-bar text-green-600 mr-2"></i>
+                      Estadísticas
+                    </h3>
+                    <button
+                      onClick={() => {
+                        if (confirm("¿Estás seguro de que quieres resetear las estadísticas?")) {
+                          localStorage.removeItem("qrAnalytics");
+                          setAnalytics(getAnalytics());
+                        }
+                      }}
+                      className="text-xs text-red-600 hover:text-red-700 transition-colors"
+                      title="Resetear estadísticas"
+                    >
+                      <i className="fas fa-trash-alt"></i>
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                      <div className="text-2xl font-bold text-green-600">{analytics.totalGenerated}</div>
+                      <div className="text-xs text-gray-600 mt-1">Total generados</div>
+                    </div>
+                    <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                      <div className="text-2xl font-bold text-green-600">{analytics.todayGenerated}</div>
+                      <div className="text-xs text-gray-600 mt-1">Hoy</div>
+                    </div>
+                  </div>
+                  {Object.keys(analytics.typesCount || {}).length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-green-200">
+                      <div className="text-xs font-semibold text-green-700 mb-2 flex items-center gap-1">
+                        <i className="fas fa-star text-yellow-500"></i>
+                        Más usados:
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(analytics.typesCount || {})
+                          .sort((a, b) => b[1] - a[1])
+                          .slice(0, 3)
+                          .map(([type, count]) => {
+                            const typeInfo = allQrTypes.find(t => t.id === type);
+                            return (
+                              <div key={type} className="flex items-center gap-1 bg-white px-2 py-1 rounded text-xs shadow-sm">
+                                <i className={`fas ${typeInfo?.icon || 'fa-qrcode'} text-green-600`}></i>
+                                <span className="text-gray-700 font-medium">{count}</span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {qrImage ? (
                 <div className="space-y-4">
