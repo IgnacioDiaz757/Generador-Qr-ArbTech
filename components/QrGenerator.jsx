@@ -1,167 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-
-// Implementación pura de QR Code Generator sin librerías externas
-// Genera QR codes válidos usando el estándar QR Code
-function generateQRCodeMatrix(text) {
-  // Determinar versión del QR (1-40, pero usaremos hasta versión 3 para simplificar)
-  const dataLength = text.length;
-  let version = 1;
-  if (dataLength > 25) version = 2;
-  if (dataLength > 47) version = 3;
-  
-  const size = 21 + (version - 1) * 4;
-  const modules = Array(size).fill(null).map(() => Array(size).fill(false));
-  
-  // Codificar datos en modo byte (8 bits por carácter)
-  const modeIndicator = "0100"; // Modo byte
-  const charCount = dataLength.toString(2).padStart(8, "0");
-  
-  // Convertir texto a bits
-  const dataBits = [];
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i);
-    for (let bit = 7; bit >= 0; bit--) {
-      dataBits.push((charCode >> bit) & 1);
-    }
-  }
-  
-  // Terminador (4 bits de 0)
-  const terminator = "0000";
-  
-  // Combinar todos los bits
-  let bitString = modeIndicator + charCount + dataBits.join("") + terminator;
-  
-  // Asegurar que la longitud sea múltiplo de 8
-  while (bitString.length % 8 !== 0) {
-    bitString += "0";
-  }
-  
-  // Convertir a array de bits
-  const allBits = bitString.split("").map(bit => parseInt(bit));
-  
-  // Patrones de búsqueda (Finders) - 3 esquinas
-  const addFinder = (modules, x, y) => {
-    const pattern = [
-      [1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,1],
-      [1,0,1,1,1,0,1],
-      [1,0,1,1,1,0,1],
-      [1,0,1,1,1,0,1],
-      [1,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1]
-    ];
-    for (let i = 0; i < 7; i++) {
-      for (let j = 0; j < 7; j++) {
-        if (x + i < size && y + j < size) {
-          modules[x + i][y + j] = pattern[i][j] === 1;
-        }
-      }
-    }
-  };
-  
-  addFinder(modules, 0, 0);
-  addFinder(modules, 0, size - 7);
-  addFinder(modules, size - 7, 0);
-  
-  // Separadores (áreas blancas alrededor de finders)
-  for (let i = 0; i < 8; i++) {
-    if (i < size) {
-      modules[7][i] = false;
-      modules[i][7] = false;
-      if (size - 8 + i < size) {
-        modules[7][size - 8 + i] = false;
-        modules[size - 8 + i][7] = false;
-      }
-    }
-  }
-  
-  // Timing patterns (líneas alternadas)
-  for (let i = 8; i < size - 8; i++) {
-    modules[6][i] = (i % 2 === 0);
-    modules[i][6] = (i % 2 === 0);
-  }
-  
-  // Dark module (siempre negro en posición específica)
-  if (size >= 21) {
-    modules[size - 8][8] = true;
-  }
-  
-  // Función para verificar si una posición está reservada
-  const isReserved = (row, col) => {
-    // Finder patterns
-    if ((row < 9 && col < 9) || 
-        (row < 9 && col >= size - 8) || 
-        (row >= size - 8 && col < 9)) {
-      return true;
-    }
-    // Timing patterns
-    if (row === 6 || col === 6) {
-      return true;
-    }
-    // Dark module
-    if (row === size - 8 && col === 8) {
-      return true;
-    }
-    return false;
-  };
-  
-  // Rellenar datos en patrón zigzag (de derecha a izquierda, alternando arriba/abajo)
-  let bitIndex = 0;
-  let direction = -1; // -1 = arriba, 1 = abajo
-  let col = size - 1;
-  
-  while (col >= 0 && bitIndex < allBits.length) {
-    // Saltar columna de timing vertical
-    if (col === 6) {
-      col--;
-      continue;
-    }
-    
-    let row = direction === -1 ? size - 1 : 0;
-    
-    while (row >= 0 && row < size && bitIndex < allBits.length) {
-      // Saltar áreas reservadas
-      if (!isReserved(row, col)) {
-        modules[row][col] = allBits[bitIndex] === 1;
-        bitIndex++;
-      }
-      
-      row += direction;
-    }
-    
-    // Cambiar dirección y mover a la siguiente columna
-    direction *= -1;
-    col -= 2; // Saltamos de dos en dos columnas
-    
-    // Si llegamos a la columna 6, saltarla
-    if (col === 6) {
-      col--;
-    }
-  }
-  
-  // Rellenar módulos restantes con 0 (blanco)
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (!isReserved(i, j) && bitIndex >= allBits.length) {
-        modules[i][j] = false;
-      }
-    }
-  }
-  
-  // Aplicar máscara (patrón 0: (i + j) % 2 === 0)
-  for (let i = 0; i < size; i++) {
-    for (let j = 0; j < size; j++) {
-      if (!isReserved(i, j)) {
-        const mask = ((i + j) % 2 === 0);
-        modules[i][j] = modules[i][j] ^ mask;
-      }
-    }
-  }
-  
-  return modules;
-}
+import QRCode from "qrcode";
 
 // Tipos de QR disponibles agrupados por categorías
 const qrCategories = {
@@ -215,6 +55,189 @@ const qrCategories = {
 
 // Lista plana de todos los tipos para búsqueda
 const allQrTypes = Object.values(qrCategories).flatMap(category => category.types);
+
+const interfaceThemes = {
+  web: {
+    backgroundClass: "bg-gradient-to-br from-blue-50 via-white to-indigo-100",
+    textClass: "text-slate-800",
+    header: {
+      icon: "fas fa-globe",
+      title: "Navegador",
+      subtitle: "Vista previa",
+    },
+  },
+  instagram: {
+    backgroundClass: "bg-gradient-to-br from-[#4f5bd5] via-[#962fbf] to-[#feda77]",
+    textClass: "text-white drop-shadow-sm",
+    header: {
+      icon: "fab fa-instagram",
+      title: "Instagram Story",
+      subtitle: "@arbtech.design",
+      badge: "LIVE",
+    },
+  },
+  facebook: {
+    backgroundClass: "bg-gradient-to-b from-[#1877f2] to-[#0f5dd7]",
+    textClass: "text-white drop-shadow-sm",
+    header: {
+      icon: "fab fa-facebook",
+      title: "Facebook Page",
+      subtitle: "facebook.com/arbtech",
+      badge: "EN VIVO",
+    },
+  },
+  whatsapp: {
+    backgroundClass: "bg-gradient-to-b from-[#25D366] to-[#128C7E]",
+    textClass: "text-white drop-shadow-sm",
+    header: {
+      icon: "fab fa-whatsapp",
+      title: "WhatsApp Business",
+      subtitle: "+54 9 351 2606190",
+    },
+  },
+  video: {
+    backgroundClass: "bg-gradient-to-br from-[#0f0c29] via-[#1f1b4a] to-[#0f0c29]",
+    textClass: "text-white",
+    header: {
+      icon: "fas fa-play",
+      title: "Video player",
+      subtitle: "Reproduciendo...",
+      badge: "HD",
+    },
+  },
+  pdf: {
+    backgroundClass: "bg-gradient-to-br from-rose-100 via-white to-amber-50",
+    textClass: "text-slate-800",
+    header: {
+      icon: "fas fa-file-pdf",
+      title: "Documento PDF",
+      subtitle: "Previsualización",
+    },
+  },
+  mp3: {
+    backgroundClass: "bg-gradient-to-br from-[#1DB954] via-[#121212] to-[#050505]",
+    textClass: "text-white",
+    header: {
+      icon: "fab fa-spotify",
+      title: "Spotify Player",
+      subtitle: "Reproduciendo ahora",
+      badge: "PREMIUM",
+    },
+  },
+  wifi: {
+    backgroundClass: "bg-gradient-to-br from-[#0f172a] via-[#0b253b] to-[#0a3c5a]",
+    textClass: "text-white",
+    header: {
+      icon: "fas fa-wifi",
+      title: "Red disponible",
+      subtitle: "Configuración rápida",
+    },
+  },
+  contact: {
+    backgroundClass: "bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#475569]",
+    textClass: "text-white",
+    header: {
+      icon: "fas fa-address-card",
+      title: "Tarjeta de contacto",
+      subtitle: "Listo para compartir",
+    },
+  },
+  gallery: {
+    backgroundClass: "bg-gradient-to-br from-[#0f172a] via-[#312e81] to-[#7c3aed]",
+    textClass: "text-white",
+    header: {
+      icon: "fas fa-images",
+      title: "Galería interactiva",
+      subtitle: "Swipe para explorar",
+    },
+  },
+  app: {
+    backgroundClass: "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-700",
+    textClass: "text-white",
+    header: {
+      icon: "fas fa-mobile-screen",
+      title: "App Store",
+      subtitle: "Recomendado",
+    },
+  },
+  links: {
+    backgroundClass: "bg-gradient-to-br from-amber-50 via-white to-rose-50",
+    textClass: "text-slate-800",
+    header: {
+      icon: "fas fa-link",
+      title: "Bio links",
+      subtitle: "Selecciona un destino",
+    },
+  },
+  menu: {
+    backgroundClass: "bg-gradient-to-br from-amber-100 via-rose-100 to-emerald-50",
+    textClass: "text-amber-900",
+    header: {
+      icon: "fas fa-utensils",
+      title: "Carta digital",
+      subtitle: "Especiales del día",
+    },
+  },
+  coupon: {
+    backgroundClass: "bg-gradient-to-br from-fuchsia-100 via-white to-amber-100",
+    textClass: "text-fuchsia-900",
+    header: {
+      icon: "fas fa-ticket",
+      title: "Cupón exclusivo",
+      subtitle: "Disponible hoy",
+      badge: "-25%",
+    },
+  },
+  social: {
+    backgroundClass: "bg-gradient-to-br from-[#7928CA] to-[#FF0080]",
+    textClass: "text-white",
+    header: {
+      icon: "fas fa-share-nodes",
+      title: "Social Hub",
+      subtitle: "Comparte tu marca",
+    },
+  },
+  default: {
+    backgroundClass: "bg-gradient-to-br from-slate-100 via-white to-slate-200",
+    textClass: "text-gray-700",
+  },
+};
+
+const getMockupVariant = (type) => {
+  switch (type) {
+    case "instagram":
+      return "instagram";
+    case "facebook":
+      return "facebook";
+    case "whatsapp":
+      return "whatsapp";
+    case "video":
+      return "video";
+    case "pdf":
+      return "pdf";
+    case "mp3":
+      return "mp3";
+    case "wifi":
+      return "wifi";
+    case "vcard":
+    case "business":
+      return "contact";
+    case "images":
+      return "gallery";
+    case "app":
+      return "app";
+    case "links":
+      return "links";
+    case "menu":
+      return "menu";
+    case "coupon":
+      return "coupon";
+    case "social":
+      return "social";
+    default:
+      return "web";
+  }
+};
 
 // Función para formatear datos según el tipo
 function formatQRData(type, data, extraData = {}) {
@@ -356,39 +379,76 @@ const detectType = (value) => {
 };
 
 // Funciones de Analytics
+const defaultAnalyticsState = {
+  totalGenerated: 0,
+  todayGenerated: 0,
+  typesCount: {},
+  lastDate: null,
+  history: [],
+};
+
 const getAnalytics = () => {
-  if (typeof window === "undefined") return { totalGenerated: 0, todayGenerated: 0, typesCount: {} };
-  
+  if (typeof window === "undefined") return defaultAnalyticsState;
+
   const analytics = localStorage.getItem("qrAnalytics");
-  if (!analytics) return { totalGenerated: 0, todayGenerated: 0, typesCount: {} };
-  
-  const data = JSON.parse(analytics);
-  const today = new Date().toDateString();
-  
-  return {
-    totalGenerated: data.totalGenerated || 0,
-    todayGenerated: data.lastDate === today ? (data.todayGenerated || 0) : 0,
-    typesCount: data.typesCount || {},
-    lastDate: data.lastDate
-  };
+  if (!analytics) return defaultAnalyticsState;
+
+  try {
+    const data = JSON.parse(analytics);
+    const today = new Date().toDateString();
+
+    return {
+      totalGenerated: data.totalGenerated || 0,
+      todayGenerated: data.lastDate === today ? data.todayGenerated || 0 : 0,
+      typesCount: data.typesCount || {},
+      lastDate: data.lastDate || null,
+      history: Array.isArray(data.history) ? data.history : [],
+    };
+  } catch {
+    return defaultAnalyticsState;
+  }
 };
 
 const updateAnalytics = (type) => {
   if (typeof window === "undefined") return;
-  
-  const analytics = getAnalytics();
+
+  const analytics = localStorage.getItem("qrAnalytics");
+  let parsed = defaultAnalyticsState;
+
+  if (analytics) {
+    try {
+      parsed = JSON.parse(analytics);
+    } catch {
+      parsed = defaultAnalyticsState;
+    }
+  }
+
   const today = new Date().toDateString();
-  
-  const updated = {
-    totalGenerated: analytics.totalGenerated + 1,
-    todayGenerated: analytics.lastDate === today ? analytics.todayGenerated + 1 : 1,
-    typesCount: {
-      ...analytics.typesCount,
-      [type]: (analytics.typesCount[type] || 0) + 1
-    },
-    lastDate: today
+  const totalGenerated = (parsed.totalGenerated || 0) + 1;
+  const todayGenerated = parsed.lastDate === today ? (parsed.todayGenerated || 0) + 1 : 1;
+  const typesCount = {
+    ...(parsed.typesCount || {}),
+    [type]: ((parsed.typesCount || {})[type] || 0) + 1,
   };
-  
+
+  const history = Array.isArray(parsed.history) ? [...parsed.history] : [];
+  if (history.length === 0 || history[history.length - 1].date !== today) {
+    history.push({ date: today, count: 1 });
+  } else {
+    history[history.length - 1].count += 1;
+  }
+  if (history.length > 7) {
+    history.shift();
+  }
+
+  const updated = {
+    totalGenerated,
+    todayGenerated,
+    typesCount,
+    lastDate: today,
+    history,
+  };
+
   localStorage.setItem("qrAnalytics", JSON.stringify(updated));
 };
 
@@ -421,6 +481,9 @@ export default function QrGenerator() {
   
   // Estado para formato de descarga
   const [downloadFormat, setDownloadFormat] = useState("png");
+  const [mockupPulse, setMockupPulse] = useState(false);
+  const mockupPulseTimeout = useRef(null);
+  const [openFaq, setOpenFaq] = useState(0);
   
   const canvasRef = useRef(null);
   const logoInputRef = useRef(null);
@@ -428,6 +491,590 @@ export default function QrGenerator() {
   const embedCodeRef = useRef(null);
 
   const selectedType = allQrTypes.find(t => t.id === qrType) || allQrTypes[0];
+  const mockupVariant = getMockupVariant(qrType);
+  const mockupTheme = interfaceThemes[mockupVariant] || interfaceThemes.default;
+  const triggerMockupPulse = () => {
+    if (mockupPulseTimeout.current) {
+      clearTimeout(mockupPulseTimeout.current);
+    }
+    setMockupPulse(true);
+    mockupPulseTimeout.current = setTimeout(() => {
+      setMockupPulse(false);
+    }, 1500);
+  };
+  const faqItems = [
+    {
+      question: "¿Necesito registrarme para usar el generador?",
+      answer: "No, puedes crear y descargar códigos ilimitados sin usuario ni contraseña.",
+    },
+    {
+      question: "¿Los QR expiran o dejan de funcionar?",
+      answer:
+        "Los QR estáticos se mantienen activos indefinidamente. Solo debes asegurarte de que el link o recurso sigan disponibles.",
+    },
+    {
+      question: "¿Puedo personalizar colores y logos sin perder lecturabilidad?",
+      answer:
+        "Sí, el nivel de corrección de errores permite integrar logos y colores siempre que exista contraste contra el fondo.",
+    },
+  ];
+  const qrSteps = [
+    {
+      icon: "fas fa-pen-ruler",
+      title: "1. Configura",
+      description: "Elige el tipo de QR e ingresa la información que quieres compartir.",
+    },
+    {
+      icon: "fas fa-sliders-h",
+      title: "2. Personaliza",
+      description: "Selecciona colores, márgenes, tamaño y agrega tu logo si lo deseas.",
+    },
+    {
+      icon: "fas fa-rocket",
+      title: "3. Descarga y comparte",
+      description: "Exporta en PNG, SVG, JPG o WEBP y usa tu QR en impresos o campañas digitales.",
+    },
+  ];
+  const bestTips = [
+    {
+      title: "Contraste inteligente",
+      description: "Asegúrate de que el código tenga buen contraste respecto al fondo.",
+    },
+    {
+      title: "Margen de seguridad",
+      description: "Mantén un área blanca alrededor del QR (quiet zone) para mejorar el escaneo.",
+    },
+    {
+      title: "Pruebas reales",
+      description: "Escanea el QR con diferentes móviles antes de imprimir o publicar.",
+    },
+  ];
+  const historyData = (analytics.history || []).slice(-7);
+  const maxHistoryValue =
+    historyData.length > 0 ? Math.max(...historyData.map((entry) => entry.count)) : 1;
+  const topTypeEntries = Object.entries(analytics.typesCount || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+  const maxTypeValue = topTypeEntries.length > 0 ? topTypeEntries[0][1] : 1;
+  const formatHistoryLabel = (dateString) => {
+    try {
+      return new Date(dateString).toLocaleDateString("es-AR", { weekday: "short" });
+    } catch {
+      return dateString.slice(0, 3);
+    }
+  };
+
+  const sanitizedText = text || "";
+  const hasQr = Boolean(qrImage);
+  const wifiMatchSsid = sanitizedText.match(/SSID:([^,]+)/i);
+  const wifiMatchPassword = sanitizedText.match(/password:([^,]+)/i);
+  const wifiSsid = extraFields.ssid || wifiMatchSsid?.[1]?.trim() || "ArbTech Guest";
+  const wifiPassword = extraFields.password || wifiMatchPassword?.[1]?.trim() || "12345678";
+  const wifiSecurity = extraFields.security || "WPA2";
+  const contactName =
+    extraFields.name || (qrType === "business" ? "ArbTech Studio" : "Nombre Apellido");
+  const contactPhone = extraFields.phone || "+54 9 351 000000";
+  const contactEmail = extraFields.email || "contacto@arbtech.com";
+  const contactAddress = extraFields.address || "Dirección completa";
+  const urlPreview =
+    sanitizedText || "https://arbtech.com/experiencias-digitales-personalizadas";
+  const linksList =
+    sanitizedText.length > 0
+      ? sanitizedText.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean).slice(0, 4)
+      : ["Sitio web oficial", "Portfolio", "WhatsApp", "LinkedIn"];
+  const menuItems =
+    sanitizedText.length > 0
+      ? sanitizedText.split(/[\n,]+/).map((item, idx) => ({
+          name: item.trim() || `Especial ${idx + 1}`,
+          price: `$${(idx + 1) * 5 + 10}`,
+        }))
+      : [
+          { name: "Bowl Primavera", price: "$12" },
+          { name: "Pasta ArbTech", price: "$15" },
+          { name: "Café Nitro", price: "$6" },
+        ];
+  const couponCode = sanitizedText || "ARBTECH2024";
+  const appName = extraFields.name || sanitizedText || "ArbTech App";
+  const galleryTitle = sanitizedText || "Colección ArbTech";
+  const socialHandle = sanitizedText || "@arbtech";
+
+  const placeholderQR = (
+    <div className="mt-3 grid h-32 place-items-center rounded-2xl border-2 border-dashed border-white/30 text-[0.65rem] uppercase tracking-[0.2em] text-white/70">
+      QR pendiente
+    </div>
+  );
+
+  const renderImageOrPlaceholder = (className = "", tone = "light") =>
+    hasQr ? (
+      <img src={qrImage} alt="QR Code" className={`rounded-xl border border-white/20 shadow-lg ${className}`} />
+    ) : (
+      <div
+        className={`rounded-xl border-2 border-dashed ${
+          tone === "light" ? "border-white/40" : "border-gray-300"
+        } ${className}`}
+      >
+        <div
+          className={`flex h-full items-center justify-center text-[0.7rem] uppercase tracking-[0.3em] ${
+            tone === "light" ? "text-white/60" : "text-gray-400"
+          }`}
+        >
+          Genera tu QR
+        </div>
+      </div>
+    );
+
+  const renderMockupContent = ({ textClass }) => {
+    switch (mockupVariant) {
+      case "wifi":
+        return (
+          <div className="flex h-full flex-col justify-between text-white">
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-white/15 bg-black/25 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[0.55rem] uppercase tracking-[0.4em] text-white/60">
+                      Red seleccionada
+                    </p>
+                    <p className="text-xl font-semibold">{wifiSsid}</p>
+                  </div>
+                  <span className="rounded-full bg-white/15 px-3 py-1 text-[0.6rem] uppercase tracking-[0.3em]">
+                    {wifiSecurity}
+                  </span>
+                </div>
+                <div className="mt-4">
+                  <div className="rounded-xl bg-black/40 px-4 py-3 font-mono tracking-[0.35em] text-sm">
+                    {wifiPassword.replace(/./g, "•")}
+                  </div>
+                  <p className="mt-2 text-[0.65rem] text-white/70">
+                    Mantén el teléfono cerca para conectarte automáticamente al escanear el QR.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/90 p-4 text-center text-gray-900 shadow-lg">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gray-500">
+                  Escanea y conecta
+                </p>
+                {hasQr ? (
+                  <img
+                    src={qrImage}
+                    alt="QR WiFi"
+                    className="mt-3 h-32 w-32 mx-auto rounded-xl border border-gray-200 shadow-lg"
+                  />
+                ) : (
+                  <div className="mt-3 h-32 rounded-xl border-2 border-dashed border-gray-300 text-xs uppercase tracking-[0.4em] text-gray-400 grid place-items-center">
+                    Genera tu QR
+                  </div>
+                )}
+                <button className="mt-4 w-full rounded-xl bg-emerald-500 py-2 text-white font-semibold shadow hover:bg-emerald-600 transition">
+                  Conectar
+                </button>
+              </div>
+            </div>
+            <p className="mt-4 text-center text-[0.6rem] text-white/70">
+              Configuración rápida Wi-Fi • ArbTech
+            </p>
+          </div>
+        );
+      case "contact":
+        return (
+          <div className="flex h-full flex-col gap-4 text-white">
+            <div className="rounded-3xl bg-white/10 p-5 backdrop-blur border border-white/15 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/20 text-lg font-semibold">
+                  {contactName
+                    .split(" ")
+                    .map((word) => word[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">{contactName}</p>
+                  <p className="text-sm text-white/70">{contactEmail}</p>
+                </div>
+              </div>
+              <div className="mt-4 space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <i className="fas fa-phone text-white/70"></i>
+                  <span>{contactPhone}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <i className="fas fa-map-marker-alt text-white/70"></i>
+                  <span>{contactAddress}</span>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button className="flex-1 rounded-xl bg-white text-slate-900 py-2 font-semibold">
+                  Llamar
+                </button>
+                <button className="flex-1 rounded-xl border border-white/40 py-2">
+                  Guardar contacto
+                </button>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/25 bg-white/10 p-4 text-center">
+              <p className="text-xs uppercase tracking-[0.3em] text-white/70">Comparte tu tarjeta</p>
+              {hasQr ? (
+                <img
+                  src={qrImage}
+                  alt="QR Contacto"
+                  className="mx-auto mt-3 h-28 w-28 rounded-xl border border-white/40"
+                />
+              ) : (
+                placeholderQR
+              )}
+            </div>
+          </div>
+        );
+      case "mp3":
+        return (
+          <div className="flex h-full flex-col justify-between gap-5 text-white">
+            <div className="rounded-3xl bg-black/35 p-5 shadow-2xl ring-1 ring-white/15 backdrop-blur">
+              <div className="relative rounded-2xl overflow-hidden border border-white/20 shadow-lg">
+                {hasQr ? (
+                  <img src={qrImage} alt="QR Code" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-40 place-items-center bg-black/50 text-xs uppercase tracking-[0.3em] text-white/60">
+                    Playlist
+                  </div>
+                )}
+                <span className="absolute bottom-3 right-3 rounded-full bg-white/25 px-3 py-1 text-[0.55rem] font-semibold uppercase tracking-[0.3em]">
+                  Scan & Play
+                </span>
+              </div>
+              <div className="mt-5 space-y-1">
+                <p className="text-base font-semibold">Daily Mix · ArbTech</p>
+                <p className="text-sm text-white/70">Lista dinámica generada desde tu QR</p>
+              </div>
+              <div className="mt-4 space-y-2">
+                <div className="h-1.5 w-full rounded-full bg-white/20">
+                  <div className="h-full rounded-full bg-white" style={{ width: "42%" }}></div>
+                </div>
+                <div className="flex justify-between text-[0.65rem] text-white/60">
+                  <span>1:12</span>
+                  <span>3:20</span>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-center gap-6 text-2xl">
+                <button className="text-white/80 hover:text-white transition">
+                  <i className="fas fa-random"></i>
+                </button>
+                <button className="text-white/80 hover:text-white transition">
+                  <i className="fas fa-step-backward"></i>
+                </button>
+                <button className="rounded-full bg-white text-black px-5 py-3 shadow-lg">
+                  <i className="fas fa-play"></i>
+                </button>
+                <button className="text-white/80 hover:text-white transition">
+                  <i className="fas fa-step-forward"></i>
+                </button>
+                <button className="text-white/80 hover:text-white transition">
+                  <i className="fas fa-heart"></i>
+                </button>
+              </div>
+            </div>
+            <div className="text-center text-xs text-white/80">
+              Escanea el QR para abrir la playlist en Spotify.
+            </div>
+          </div>
+        );
+      case "video":
+        return (
+          <div className="flex h-full flex-col text-white">
+            <div className="rounded-3xl border border-white/15 bg-black/30 p-4">
+              <div className="relative aspect-video overflow-hidden rounded-2xl bg-black/60">
+                {hasQr ? (
+                  <img src={qrImage} alt="QR Video" className="h-full w-full object-cover opacity-70" />
+                ) : (
+                  <div className="grid h-full place-items-center text-xs uppercase tracking-[0.3em] text-white/50">
+                    Video preview
+                  </div>
+                )}
+                <button className="absolute inset-0 m-auto h-12 w-12 rounded-full bg-white/90 text-slate-900 shadow-lg">
+                  <i className="fas fa-play"></i>
+                </button>
+                <div className="absolute bottom-3 left-4 right-4">
+                  <div className="h-1.5 rounded-full bg-white/30">
+                    <div className="h-full w-2/3 rounded-full bg-white"></div>
+                  </div>
+                  <div className="mt-1 flex justify-between text-[0.6rem] text-white/70">
+                    <span>02:16</span>
+                    <span>07:45</span>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-white/80">
+                Escanea el QR para reproducir el video en tu dispositivo.
+              </p>
+            </div>
+          </div>
+        );
+      case "pdf":
+        return (
+          <div className="flex h-full flex-col justify-between">
+            <div className="rounded-3xl bg-white/95 p-5 text-slate-800 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 text-rose-600">
+                  <i className="fas fa-file-pdf text-xl"></i>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">Documento PDF</p>
+                  <p className="text-sm text-slate-500">Previzualización rápida</p>
+                </div>
+              </div>
+              <div className="mt-4 h-40 rounded-2xl border-2 border-dashed border-slate-200 bg-white/60">
+                {hasQr ? (
+                  <img src={qrImage} alt="PDF QR" className="h-full w-full rounded-2xl object-cover" />
+                ) : (
+                  <div className="grid h-full place-items-center text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+                    QR pendiente
+                  </div>
+                )}
+              </div>
+              <button className="mt-4 w-full rounded-xl bg-rose-500 py-2 text-white font-semibold shadow hover:bg-rose-600 transition">
+                Descargar PDF
+              </button>
+            </div>
+          </div>
+        );
+      case "whatsapp":
+        return (
+          <div className="flex h-full flex-col justify-between text-white">
+            <div className="space-y-3">
+              <div className="flex items-start gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/30">
+                  <i className="fas fa-user"></i>
+                </div>
+                <div className="rounded-2xl rounded-tl-none bg-emerald-500/90 px-4 py-2 text-sm shadow">
+                  ¡Hola! Escaneá el QR para continuar la conversación.
+                </div>
+              </div>
+              <div className="flex items-start gap-2 justify-end">
+                <div className="rounded-2xl rounded-tr-none bg-white/20 px-4 py-2 text-sm shadow">
+                  Te enviamos todos los datos al instante.
+                </div>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white/95 p-3 text-center text-gray-800 shadow-lg">
+              {hasQr ? (
+                <img src={qrImage} alt="WhatsApp QR" className="mx-auto h-28 w-28 rounded-xl border border-gray-200" />
+              ) : (
+                <div className="grid h-28 place-items-center rounded-xl border-2 border-dashed border-gray-300 text-xs uppercase tracking-[0.3em] text-gray-400">
+                  QR pendiente
+                </div>
+              )}
+              <p className="mt-2 text-xs text-gray-500">Comparte este código para abrir WhatsApp.</p>
+            </div>
+          </div>
+        );
+      case "instagram":
+        return (
+          <div className="flex h-full flex-col justify-center text-white">
+            <div className="rounded-[32px] border border-white/20 bg-white/10 p-3">
+              <div className="flex items-center gap-2 px-2 py-1 text-xs text-white/70">
+                <div className="h-2 w-2 rounded-full bg-red-400 animate-pulse"></div>
+                EN DIRECTO · {socialHandle.replace(/@/g, "@")}
+              </div>
+              <div className="mt-2 overflow-hidden rounded-3xl border border-white/25">
+                {hasQr ? (
+                  <img src={qrImage} alt="Story QR" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-64 place-items-center text-xs uppercase tracking-[0.3em] text-white/70">
+                    Story preview
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-center text-xs uppercase tracking-[0.4em] text-white/80">
+                Swipe up para abrir
+              </p>
+            </div>
+          </div>
+        );
+      case "facebook":
+        return (
+          <div className="flex h-full flex-col gap-4 text-white">
+            <div className="rounded-2xl bg-white/10 p-4 backdrop-blur border border-white/15">
+              <div className="flex items-center gap-2 text-sm">
+                <div className="h-8 w-8 rounded-full bg-white/30 grid place-items-center">
+                  <i className="fab fa-facebook-f"></i>
+                </div>
+                <div>
+                  <p className="font-semibold">ArbTech Studio</p>
+                  <span className="text-xs text-white/70">Hace 5 minutos</span>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-white/90">
+                Escanea el QR y descubre nuestro último proyecto interactivo.
+              </p>
+              <div className="mt-3 overflow-hidden rounded-2xl border border-white/20 bg-white/10">
+                {renderImageOrPlaceholder("h-40 w-full object-cover")}
+              </div>
+              <button className="mt-3 w-full rounded-xl bg-white text-[#1877f2] py-2 font-semibold">
+                Ver publicación
+              </button>
+            </div>
+          </div>
+        );
+      case "gallery":
+        return (
+          <div className="flex h-full flex-col text-white">
+            <p className="text-sm text-white/80">{galleryTitle}</p>
+            <div className="mt-3 grid flex-1 grid-cols-2 gap-2">
+              {["A", "B", "C", "D"].map((label, idx) => (
+                <div
+                  key={label}
+                  className={`rounded-2xl border border-white/20 ${idx === 0 ? "row-span-2" : ""} overflow-hidden bg-white/10`}
+                >
+                  {idx === 0 && hasQr ? (
+                    <img src={qrImage} alt="Galería QR" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="grid h-full place-items-center text-xs uppercase tracking-[0.3em] text-white/60">
+                      Shot {idx + 1}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      case "links":
+        return (
+          <div className={`flex h-full flex-col justify-between ${textClass}`}>
+            <div className="space-y-3">
+              {linksList.map((link, idx) => (
+                <div
+                  key={`${link}-${idx}`}
+                  className="rounded-2xl border border-white/20 bg-white/80/5 px-4 py-3 text-sm backdrop-blur hover:bg-white/20 transition"
+                >
+                  <div className="flex items-center justify-between">
+                    <span>{link}</span>
+                    <i className="fas fa-arrow-up-right-from-square text-xs opacity-60"></i>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/25 bg-white/10 p-3 text-center">
+              {renderImageOrPlaceholder("h-24 w-full", "dark")}
+              <p className="mt-2 text-xs opacity-70">Escanea y comparte tu Link in Bio.</p>
+            </div>
+          </div>
+        );
+      case "menu":
+        return (
+          <div className="flex h-full flex-col justify-between text-amber-900">
+            <div className="rounded-3xl border border-amber-200 bg-white/80 p-4 shadow-md">
+              <p className="text-center text-xs uppercase tracking-[0.4em] text-amber-400">
+                menú digital
+              </p>
+              <ul className="mt-3 space-y-2 text-sm">
+                {menuItems.slice(0, 3).map((item, idx) => (
+                  <li key={`${item.name}-${idx}`} className="flex justify-between">
+                    <span>{item.name}</span>
+                    <span className="font-semibold">{item.price}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-2xl border border-dashed border-amber-300 bg-white/70 p-3 text-center">
+              {hasQr ? (
+                <img src={qrImage} alt="QR Menú" className="mx-auto h-24 w-24 rounded-lg border border-amber-200" />
+              ) : (
+                <div className="grid h-24 place-items-center rounded-lg border-2 border-dashed border-amber-200 text-xs uppercase tracking-[0.3em] text-amber-300">
+                  QR pendiente
+                </div>
+              )}
+              <p className="mt-2 text-xs text-amber-500">Escanea para ver la carta completa.</p>
+            </div>
+          </div>
+        );
+      case "coupon":
+        return (
+          <div className="flex h-full flex-col justify-between text-fuchsia-900">
+            <div className="rounded-3xl border border-fuchsia-200 bg-white/90 p-4 shadow-lg">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold uppercase tracking-[0.3em] text-fuchsia-500">
+                  Cupón especial
+                </p>
+                <span className="rounded-full bg-fuchsia-100 px-3 py-1 text-xs font-semibold">
+                  -25%
+                </span>
+              </div>
+              <p className="mt-3 text-3xl font-black tracking-widest">{couponCode}</p>
+              <p className="mt-2 text-xs text-fuchsia-500">Escanea el QR para aplicar el beneficio.</p>
+            </div>
+            <div className="rounded-2xl border border-fuchsia-200 bg-white/80 p-3 text-center">
+              {renderImageOrPlaceholder("h-24", "dark")}
+            </div>
+          </div>
+        );
+      case "app":
+        return (
+          <div className="flex h-full flex-col justify-between text-white">
+            <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <div className="flex items-center gap-3">
+                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-white/20 text-2xl">
+                  <i className="fas fa-mobile-screen"></i>
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">{appName}</p>
+                  <span className="text-xs text-white/70">App Store · 4.9 ⭐️</span>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-white/80">
+                Escanea el QR para descargar la app desde tu tienda favorita.
+              </p>
+              <button className="mt-4 w-full rounded-xl bg-white py-2 font-semibold text-slate-900">
+                Obtener
+              </button>
+            </div>
+            <div className="rounded-2xl border border-white/20 bg-white/10 p-3 text-center">
+              {renderImageOrPlaceholder("h-24")}
+            </div>
+          </div>
+        );
+      case "social":
+        return (
+          <div className="flex h-full flex-col justify-between text-white">
+            <div className="grid grid-cols-2 gap-2 text-center text-sm">
+              {["Instagram", "Facebook", "LinkedIn", "TikTok"].map((network) => (
+                <div key={network} className="rounded-2xl border border-white/20 bg-white/10 px-2 py-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-white/60">{network}</p>
+                  <p className="text-sm font-semibold mt-1">{socialHandle}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-2xl border border-white/30 bg-white/10 p-3 text-center">
+              {renderImageOrPlaceholder("h-24")}
+              <p className="mt-2 text-xs text-white/70">Escanea para abrir tu hub social.</p>
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <div className={`flex h-full flex-col justify-between ${textClass}`}>
+            <div className="rounded-3xl border border-white/20 bg-white/90 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <i className="fas fa-lock text-xs"></i>
+                <span>https://</span>
+                <span className="truncate">{urlPreview.replace(/^https?:\/\//, "")}</span>
+              </div>
+              <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3 text-gray-800 shadow-inner">
+                {hasQr ? (
+                  <img src={qrImage} alt="QR vista previa" className="w-full rounded-xl" />
+                ) : (
+                  <div className="grid h-28 place-items-center rounded-xl border-2 border-dashed border-gray-200 text-xs uppercase tracking-[0.3em] text-gray-400">
+                    Vista previa
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-gray-500">
+                  Escanea para abrir la página en tu navegador.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  };
 
   // Validar input en tiempo real
   useEffect(() => {
@@ -455,6 +1102,14 @@ export default function QrGenerator() {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (mockupPulseTimeout.current) {
+        clearTimeout(mockupPulseTimeout.current);
+      }
+    };
   }, []);
 
   // Filtrar tipos según búsqueda
@@ -487,7 +1142,7 @@ export default function QrGenerator() {
 
   const generateQr = async () => {
     const formattedData = formatQRData(qrType, text, extraFields);
-    
+
     if (!formattedData.trim()) {
       return;
     }
@@ -504,169 +1159,102 @@ export default function QrGenerator() {
 
       const ctx = canvas.getContext("2d");
       const size = qrSize;
-      const padding = qrMargin;
+      const padding = Math.min(qrMargin, size / 2 - 10);
+      const qrAreaSize = Math.max(size - padding * 2, 80);
 
       canvas.width = size;
       canvas.height = size;
 
-      // Usar API externa para generar QR válido (sin librerías npm)
-      // API pública de QR code generation con nivel de corrección de errores
-      const encodedData = encodeURIComponent(formattedData);
-      // ECC level: L (7%), M (15%), Q (25%), H (30%)
-      // Nota: La API qrserver.com no soporta el parámetro ecc directamente, pero usamos M por defecto
-      const qrSizeValue = size - padding * 2;
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSizeValue}x${qrSizeValue}&data=${encodedData}&color=${qrColor.replace('#', '')}`;
-      
-      const qrImg = new Image();
-      qrImg.crossOrigin = "anonymous";
-      
-      qrImg.onload = () => {
-        // Fondo blanco
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, size, size);
+      const tempCanvas = document.createElement("canvas");
 
-        // Dibujar QR desde la API
-        ctx.drawImage(qrImg, padding, padding, size - padding * 2, size - padding * 2);
-
-        // Si el color no es negro, reemplazar el color negro del QR
-        if (qrColor !== "#000000") {
-          const imageData = ctx.getImageData(0, 0, size, size);
-          const data = imageData.data;
-          const targetColor = hexToRgb(qrColor);
-          
-          for (let i = 0; i < data.length; i += 4) {
-            // Si es un pixel oscuro (negro), cambiarlo al color seleccionado
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            const a = data[i + 3];
-            
-            // Detectar píxeles negros (umbral bajo)
-            if (r < 50 && g < 50 && b < 50 && a > 0) {
-              data[i] = targetColor.r;
-              data[i + 1] = targetColor.g;
-              data[i + 2] = targetColor.b;
-            }
+      await new Promise((resolve, reject) => {
+        QRCode.toCanvas(
+          tempCanvas,
+          formattedData,
+          {
+            errorCorrectionLevel: errorCorrection,
+            width: qrAreaSize,
+            margin: 0,
+            color: {
+              dark: qrColor || "#000000",
+              light: "#FFFFFF",
+            },
+          },
+          (error) => {
+            if (error) reject(error);
+            else resolve(null);
           }
-          
-          ctx.putImageData(imageData, 0, 0);
-        }
+        );
+      });
 
-        // Agregar logo si existe
-        if (logoPreview) {
-          const logoSize = size * 0.25;
-          const logoX = (size - logoSize) / 2;
-          const logoY = (size - logoSize) / 2;
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(tempCanvas, padding, padding);
 
-          const logoImg = new Image();
-          logoImg.crossOrigin = "anonymous";
-          logoImg.onload = () => {
-            // Fondo blanco redondeado para el logo
-            const cornerRadius = 10;
-            ctx.fillStyle = "#FFFFFF";
-            ctx.beginPath();
-            // Dibujar rectángulo redondeado manualmente
-            const x = logoX - 10;
-            const y = logoY - 10;
-            const w = logoSize + 20;
-            const h = logoSize + 20;
-            ctx.moveTo(x + cornerRadius, y);
-            ctx.lineTo(x + w - cornerRadius, y);
-            ctx.quadraticCurveTo(x + w, y, x + w, y + cornerRadius);
-            ctx.lineTo(x + w, y + h - cornerRadius);
-            ctx.quadraticCurveTo(x + w, y + h, x + w - cornerRadius, y + h);
-            ctx.lineTo(x + cornerRadius, y + h);
-            ctx.quadraticCurveTo(x, y + h, x, y + h - cornerRadius);
-            ctx.lineTo(x, y + cornerRadius);
-            ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
-            ctx.closePath();
-            ctx.fill();
-
-            // Dibujar logo con recorte redondeado
-            ctx.save();
-            ctx.beginPath();
-            const logoX2 = logoX;
-            const logoY2 = logoY;
-            ctx.moveTo(logoX2 + cornerRadius, logoY2);
-            ctx.lineTo(logoX2 + logoSize - cornerRadius, logoY2);
-            ctx.quadraticCurveTo(logoX2 + logoSize, logoY2, logoX2 + logoSize, logoY2 + cornerRadius);
-            ctx.lineTo(logoX2 + logoSize, logoY2 + logoSize - cornerRadius);
-            ctx.quadraticCurveTo(logoX2 + logoSize, logoY2 + logoSize, logoX2 + logoSize - cornerRadius, logoY2 + logoSize);
-            ctx.lineTo(logoX2 + cornerRadius, logoY2 + logoSize);
-            ctx.quadraticCurveTo(logoX2, logoY2 + logoSize, logoX2, logoY2 + logoSize - cornerRadius);
-            ctx.lineTo(logoX2, logoY2 + cornerRadius);
-            ctx.quadraticCurveTo(logoX2, logoY2, logoX2 + cornerRadius, logoY2);
-            ctx.closePath();
-            ctx.clip();
-            ctx.drawImage(logoImg, logoX2, logoY2, logoSize, logoSize);
-            ctx.restore();
-            
-            const imageData = canvas.toDataURL("image/png");
-            setQrImage(imageData);
-            
-            // Actualizar analytics después de generar
-            updateAnalytics(qrType);
-            setAnalytics(getAnalytics());
-          };
-          logoImg.onerror = () => {
-            const imageData = canvas.toDataURL("image/png");
-            setQrImage(imageData);
-            updateAnalytics(qrType);
-            setAnalytics(getAnalytics());
-          };
-          logoImg.src = logoPreview;
-        } else {
-          const imageData = canvas.toDataURL("image/png");
-          setQrImage(imageData);
-          
-          // Actualizar analytics después de generar
-          updateAnalytics(qrType);
-          setAnalytics(getAnalytics());
-        }
-      };
-      
-      qrImg.onerror = () => {
-        // Fallback: usar generación local si la API falla
-        const modules = generateQRCodeMatrix(formattedData);
-        const moduleSize = (size - padding * 2) / modules.length;
-
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(0, 0, size, size);
-
-        ctx.fillStyle = qrColor;
-        
-        for (let i = 0; i < modules.length; i++) {
-          for (let j = 0; j < modules[i].length; j++) {
-            if (modules[i][j]) {
-              const x = padding + j * moduleSize;
-              const y = padding + i * moduleSize;
-              ctx.fillRect(x, y, moduleSize, moduleSize);
-            }
-          }
-        }
-        
+      const finalizeCanvas = () => {
         const imageData = canvas.toDataURL("image/png");
         setQrImage(imageData);
-        
-        // Actualizar analytics después de generar
         updateAnalytics(qrType);
         setAnalytics(getAnalytics());
+        triggerMockupPulse();
       };
-      
-      qrImg.src = qrApiUrl;
+
+      if (logoPreview) {
+        const logoSizeMap = { L: 0.12, M: 0.16, Q: 0.18, H: 0.2 };
+        const logoScale = logoSizeMap[errorCorrection] || 0.16;
+        const logoSize = Math.min(size * logoScale, size * 0.25);
+        const logoX = (size - logoSize) / 2;
+        const logoY = (size - logoSize) / 2;
+
+        const logoImg = new Image();
+        logoImg.crossOrigin = "anonymous";
+        logoImg.onload = () => {
+          const cornerRadius = Math.max(6, logoSize * 0.1);
+          const paddingAroundLogo = logoSize * 0.15;
+          ctx.fillStyle = "#FFFFFF";
+          ctx.beginPath();
+          const x = logoX - paddingAroundLogo;
+          const y = logoY - paddingAroundLogo;
+          const w = logoSize + paddingAroundLogo * 2;
+          const h = logoSize + paddingAroundLogo * 2;
+          ctx.moveTo(x + cornerRadius, y);
+          ctx.lineTo(x + w - cornerRadius, y);
+          ctx.quadraticCurveTo(x + w, y, x + w, y + cornerRadius);
+          ctx.lineTo(x + w, y + h - cornerRadius);
+          ctx.quadraticCurveTo(x + w, y + h, x + w - cornerRadius, y + h);
+          ctx.lineTo(x + cornerRadius, y + h);
+          ctx.quadraticCurveTo(x, y + h, x, y + h - cornerRadius);
+          ctx.lineTo(x, y + cornerRadius);
+          ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(logoX + cornerRadius, logoY);
+          ctx.lineTo(logoX + logoSize - cornerRadius, logoY);
+          ctx.quadraticCurveTo(logoX + logoSize, logoY, logoX + logoSize, logoY + cornerRadius);
+          ctx.lineTo(logoX + logoSize, logoY + logoSize - cornerRadius);
+          ctx.quadraticCurveTo(logoX + logoSize, logoY + logoSize, logoX + logoSize - cornerRadius, logoY + logoSize);
+          ctx.lineTo(logoX + cornerRadius, logoY + logoSize);
+          ctx.quadraticCurveTo(logoX, logoY + logoSize, logoX, logoY + logoSize - cornerRadius);
+          ctx.lineTo(logoX, logoY + cornerRadius);
+          ctx.quadraticCurveTo(logoX, logoY, logoX + cornerRadius, logoY);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+          ctx.restore();
+
+          finalizeCanvas();
+        };
+        logoImg.onerror = finalizeCanvas;
+        logoImg.src = logoPreview;
+      } else {
+        finalizeCanvas();
+      }
     } catch (error) {
       console.error("Error al generar QR:", error);
     }
-  };
-
-  // Función auxiliar para convertir hex a RGB
-  const hexToRgb = (hex) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-      r: parseInt(result[1], 16),
-      g: parseInt(result[2], 16),
-      b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
   };
 
   const handleLogoChange = (e) => {
@@ -895,6 +1483,68 @@ export default function QrGenerator() {
     const code = getEmbedCode();
     copyToClipboard(code, "text");
   };
+
+const PhoneMockup = ({ children, theme, pulse }) => {
+  const backgroundClass = theme?.backgroundClass ?? "bg-gradient-to-br from-slate-100 via-white to-slate-200";
+  const textClass = theme?.textClass ?? "text-gray-700";
+  const header = theme?.header;
+  const backgroundWithAnimation =
+    theme?.disableAnimation === true ? backgroundClass : `${backgroundClass} animate-gradient`;
+
+  return (
+    <div className="flex justify-center">
+      <div
+        className={`relative w-[220px] sm:w-[260px] lg:w-[300px] aspect-[9/17] bg-neutral-900 rounded-[40px] p-2.5 shadow-[0_20px_45px_rgba(15,23,42,0.4)] animate-phone ${
+          pulse ? "animate-pulse-strong" : ""
+        }`}
+      >
+        <div
+          aria-hidden="true"
+          className="absolute top-3 left-1/2 -translate-x-1/2 w-20 h-4 bg-black/70 rounded-full"
+        ></div>
+        <div
+          aria-hidden="true"
+          className="absolute top-12 right-2 w-1.5 h-12 bg-black/60 rounded-full"
+        ></div>
+        <div
+          aria-hidden="true"
+          className="absolute top-28 right-2 w-1.5 h-16 bg-black/60 rounded-full"
+        ></div>
+        <div
+          className={`relative z-10 flex h-full flex-col rounded-[34px] overflow-hidden ${backgroundWithAnimation}`}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-5 top-0 h-6 rounded-b-[18px] bg-black/10"
+          ></div>
+          <div className="relative z-10 flex h-full flex-col px-4 py-5 space-y-4">
+            {header && (
+              <div className={`flex items-center justify-between text-[0.7rem] font-semibold ${textClass}`}>
+                <div className="flex items-center gap-2">
+                  <i className={`${header.icon} text-base`}></i>
+                  <div className="leading-tight">
+                    <p>{header.title}</p>
+                    {header.subtitle && (
+                      <span className="block text-[0.6rem] opacity-80">{header.subtitle}</span>
+                    )}
+                  </div>
+                </div>
+                {header.badge && (
+                  <span className="rounded-full bg-white/25 px-2 py-1 text-[0.55rem] uppercase tracking-[0.2em]">
+                    {header.badge}
+                  </span>
+                )}
+              </div>
+            )}
+            <div className="flex-1 flex flex-col">
+              {typeof children === "function" ? children({ textClass }) : children}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
   // Regenerar QR cuando cambia el color, logo, tamaño, margen o corrección de errores
   useEffect(() => {
@@ -1446,41 +2096,76 @@ export default function QrGenerator() {
                       <div className="text-xs text-gray-600 mt-1">Hoy</div>
                     </div>
                   </div>
-                  {Object.keys(analytics.typesCount || {}).length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-green-200">
-                      <div className="text-xs font-semibold text-green-700 mb-2 flex items-center gap-1">
-                        <i className="fas fa-star text-yellow-500"></i>
-                        Más usados:
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-2xl bg-white/90 p-4 shadow-sm border border-green-100">
+                      <div className="flex items-center justify-between text-xs font-semibold text-green-700 uppercase tracking-[0.3em]">
+                        <span>Actividad semanal</span>
+                        <span>{historyData.length} días</span>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(analytics.typesCount || {})
-                          .sort((a, b) => b[1] - a[1])
-                          .slice(0, 3)
-                          .map(([type, count]) => {
-                            const typeInfo = allQrTypes.find(t => t.id === type);
-                            return (
-                              <div key={type} className="flex items-center gap-1 bg-white px-2 py-1 rounded text-xs shadow-sm">
-                                <i className={`${typeInfo?.icon?.startsWith('fa') ? typeInfo.icon : `fas ${typeInfo?.icon || 'fa-qrcode'}`} text-green-600`}></i>
-                                <span className="text-gray-700 font-medium">{count}</span>
-                              </div>
-                            );
-                          })}
+                      <div className="mt-4 flex h-28 items-end gap-2">
+                        {historyData.map((entry) => (
+                          <div key={entry.date} className="flex-1 flex flex-col items-center gap-2">
+                            <div
+                              className="w-full rounded-t-xl bg-gradient-to-t from-emerald-500 to-green-400 transition-all duration-500"
+                              style={{ height: `${(entry.count / maxHistoryValue) * 100}%` }}
+                            ></div>
+                            <span className="text-[0.65rem] font-semibold text-green-800">
+                              {formatHistoryLabel(entry.date)}
+                            </span>
+                          </div>
+                        ))}
+                        {historyData.length === 0 && (
+                          <div className="text-xs text-green-800/70">Genera tu primer QR para ver estadísticas.</div>
+                        )}
                       </div>
                     </div>
-                  )}
+                    <div className="rounded-2xl bg-white/90 p-4 shadow-sm border border-green-100">
+                      <div className="text-xs font-semibold text-green-700 uppercase tracking-[0.3em]">
+                        Tipos más usados
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {topTypeEntries.length > 0 ? (
+                          topTypeEntries.map(([type, count]) => {
+                            const typeInfo = allQrTypes.find((t) => t.id === type);
+                            return (
+                              <div key={type}>
+                                <div className="flex items-center justify-between text-xs text-green-900 mb-1">
+                                  <span className="flex items-center gap-2">
+                                    <i
+                                      className={`${
+                                        typeInfo?.icon?.startsWith("fa")
+                                          ? typeInfo.icon
+                                          : `fas ${typeInfo?.icon || "fa-qrcode"}`
+                                      } text-green-500`}
+                                    ></i>
+                                    {typeInfo?.name || type}
+                                  </span>
+                                  <span className="font-semibold">{count}</span>
+                                </div>
+                                <div className="h-2 w-full rounded-full bg-slate-100">
+                                  <div
+                                    className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-500 transition-all duration-500"
+                                    style={{ width: `${(count / maxTypeValue) * 100}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <p className="text-xs text-slate-500">Genera algunos QR para ver la distribución.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {qrImage ? (
-                <div className="space-y-4">
-                  <div className="flex justify-center bg-gray-50 rounded-lg p-4 sm:p-6">
-                    <img
-                      src={qrImage}
-                      alt="QR Code"
-                      className="max-w-full h-auto border-4 border-white rounded-lg shadow-md"
-                    />
-                  </div>
+              <PhoneMockup theme={mockupTheme} pulse={mockupPulse}>
+                {renderMockupContent}
+              </PhoneMockup>
 
+              {qrImage && (
+                <div className="space-y-4">
                   {/* Selector de formato y botón Descargar */}
                   <div className="space-y-3">
                     <div>
@@ -1683,18 +2368,110 @@ export default function QrGenerator() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-48 sm:h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-                  <i className={`${selectedType.icon.startsWith('fa') ? selectedType.icon : `fas ${selectedType.icon}`} text-4xl sm:text-6xl text-green-300 hover:text-green-400 transition-colors mb-3 sm:mb-4`}></i>
-                  <p className="text-gray-500 text-center px-4 text-xs sm:text-sm">
-                    Completa los campos y haz clic en "Generar QR" para ver la vista previa
-                  </p>
-                </div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Sección de información adicional */}
+      <section className="bg-gradient-to-b from-white to-slate-50 border-t border-slate-100">
+        <div className="max-w-6xl mx-auto px-4 py-16 space-y-12">
+          <div className="grid gap-8 lg:grid-cols-2">
+            <div className="rounded-3xl bg-white p-8 shadow-xl border border-slate-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-11 w-11 rounded-2xl bg-green-100 text-green-600 grid place-items-center text-xl">
+                  <i className="fas fa-question-circle"></i>
+                </div>
+                <h2 className="text-2xl font-semibold text-slate-900">Preguntas frecuentes</h2>
+              </div>
+              <dl className="space-y-3">
+                {faqItems.map((item, idx) => {
+                  const isOpen = openFaq === idx;
+                  return (
+                    <div
+                      key={item.question}
+                      className={`rounded-2xl border border-slate-100 transition-all duration-300 ${
+                        isOpen ? "bg-green-50/80 shadow-inner" : "bg-white hover:border-green-200"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOpenFaq(isOpen ? null : idx)}
+                        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left focus:outline-none"
+                      >
+                        <span className="font-semibold text-slate-900">{item.question}</span>
+                        <i
+                          className={`fas fa-chevron-${isOpen ? "up" : "down"} text-sm text-slate-400 transition-transform duration-300 ${
+                            isOpen ? "rotate-180" : ""
+                          }`}
+                        ></i>
+                      </button>
+                      <div
+                        className={`px-5 pb-4 text-sm text-slate-600 transition-all duration-300 ${
+                          isOpen ? "max-h-48 opacity-100" : "max-h-0 opacity-0 overflow-hidden"
+                        }`}
+                      >
+                        {item.answer}
+                      </div>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
+
+            <div className="rounded-3xl bg-white p-8 shadow-xl border border-slate-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="h-11 w-11 rounded-2xl bg-emerald-100 text-emerald-600 grid place-items-center text-xl">
+                  <i className="fas fa-qrcode"></i>
+                </div>
+                <h2 className="text-2xl font-semibold text-slate-900">¿Cómo funciona un código QR?</h2>
+              </div>
+              <div className="space-y-4">
+                {qrSteps.map((step, index) => (
+                  <div
+                    key={step.title}
+                    className="group rounded-2xl border border-slate-100 bg-white/90 px-5 py-4 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 text-xl">
+                        <i className={step.icon}></i>
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">{step.title}</p>
+                        <p className="text-xs uppercase tracking-[0.35em] text-emerald-400">
+                          Paso {index + 1}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm text-slate-600">{step.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl bg-white p-8 shadow-xl border border-slate-100">
+            <div className="flex flex-wrap gap-3 items-center mb-4">
+              <div className="h-11 w-11 rounded-2xl bg-blue-100 text-blue-600 grid place-items-center text-xl">
+                <i className="fas fa-lightbulb"></i>
+              </div>
+              <h2 className="text-2xl font-semibold text-slate-900">Tips para obtener el mejor resultado</h2>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3 text-slate-600">
+              {bestTips.map((tip) => (
+                <div
+                  key={tip.title}
+                  className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 transition hover:-translate-y-1 hover:bg-white hover:shadow-lg"
+                >
+                  <p className="font-semibold text-slate-900">{tip.title}</p>
+                  <p className="mt-2 text-sm">{tip.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
       {/* Canvas oculto para generar QR */}
       <canvas ref={canvasRef} className="hidden" />
     </>
