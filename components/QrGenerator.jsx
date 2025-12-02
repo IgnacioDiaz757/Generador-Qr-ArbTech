@@ -2470,6 +2470,62 @@ const PhoneMockup = ({ children, theme, pulse }) => {
               ))}
             </div>
           </div>
+
+          {/* Sección de consejos de diseño y contacto */}
+          <div className="rounded-3xl bg-white p-8 shadow-xl border border-slate-100">
+            <div className="flex flex-wrap gap-3 items-center mb-6">
+              <div className="h-11 w-11 rounded-2xl bg-purple-100 text-purple-600 grid place-items-center text-xl">
+                <i className="fas fa-pen-ruler"></i>
+              </div>
+              <h2 className="text-2xl font-semibold text-slate-900">
+                Consejos de uso: flyers, tarjetas y contacto
+              </h2>
+            </div>
+            <div className="grid gap-8 md:grid-cols-3 text-slate-600">
+              <div className="space-y-3">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                  <i className="fas fa-file-lines text-purple-500"></i>
+                  Flyer con QR
+                </h3>
+                <ul className="space-y-2 text-sm">
+                  <li>• Coloca el QR en una zona limpia del flyer, lejos de bordes y textos saturados.</li>
+                  <li>• Añade una llamada a la acción clara: “Escaneá para ver el menú”, “Ver más fotos”, etc.</li>
+                  <li>• No reduzcas demasiado el tamaño: para lectura a distancia media, apunta a al menos 3–4 cm de lado.</li>
+                  <li>• Evita fondos muy oscuros o muy texturados detrás del QR.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                  <i className="fas fa-address-card text-emerald-500"></i>
+                  Tarjeta de presentación
+                </h3>
+                <ul className="space-y-2 text-sm">
+                  <li>• Ubica el QR en la cara trasera de la tarjeta para no recargar la parte frontal.</li>
+                  <li>• Usa un QR de contacto (vCard) para que al escanear se guarde directo en la agenda.</li>
+                  <li>• Mantén buen contraste y un margen blanco alrededor del código.</li>
+                  <li>• Incluye también tus datos en texto por si alguien no puede escanear.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                  <i className="fas fa-building text-blue-500"></i>
+                  Hoja de contacto ArbTech
+                </h3>
+                <p className="text-sm">
+                  Puedes crear una hoja de contacto con un QR que apunte a tu portfolio, redes y datos
+                  de contacto centralizados. Ideal para presentaciones, presupuestos y dossieres.
+                </p>
+                <ul className="space-y-2 text-sm">
+                  <li>• Genera un QR de tipo “links” o “social” con tus principales canales.</li>
+                  <li>• En la hoja, acompaña el QR con un breve resumen de tus servicios.</li>
+                  <li>• Usa un encabezado claro, por ejemplo “Escaneá para ver más de ArbTech”.</li>
+                  <li>• Si lo imprimes, revisa que el QR sea legible en blanco y negro.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
       {/* Canvas oculto para generar QR */}
